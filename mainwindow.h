@@ -17,6 +17,8 @@
 #include <QJsonArray>
 #include <QVariant>
 #include <QVariantList>
+#include <QBuffer>
+#include <QTimer>
 
 #include <QMutex>
 
@@ -38,17 +40,21 @@ public:
     QNetworkAccessManager *m_getLongpollManager;
     QNetworkAccessManager *m_getHearheatManager;
     QNetworkAccessManager *m_getContinuousManager;
+    QNetworkAccessManager *m_getChangesManager;
     QNetworkAccessManager *nam_uuid;
     QJsonObject m_sendJsonData;
     QSettings::SettingsMap m_map;
     QString m_allDocsUrl;
     QString m_dbUrl;
     QString m_continuousUrl;
+    QString m_changesUrl;
+    QString m_since;
 
     QMutex m_mutex;
+    QBuffer *m_buffer;
 
     //CRUD
-    QNetworkReply * get(QNetworkAccessManager *networkAccessManager, QString requestUrl);
+    QNetworkReply * get(QNetworkAccessManager *networkAccessManager, QString &requestUrl);
 
 protected:
     void changeEvent(QEvent *e);
@@ -65,12 +71,15 @@ private slots:
     void readMsg(QNetworkReply *replay);
     void newMsg(QNetworkReply *reply);
     QJsonDocument getJson(QByteArray qba);
+    void networkAccessibleChangedSlot(QNetworkAccessManager::NetworkAccessibility);
+    void getChangesDoc(QNetworkReply*);
 
 
 
     void on_pushButton_gmsglist_clicked();
+    void on_pushButton_continuous_clicked();
 
-    void on_pushButton_2_clicked();
+    void on_pushButton_changes_clicked();
 
 private:
     Ui::MainWindow *ui;

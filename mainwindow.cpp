@@ -16,7 +16,18 @@ MainWindow::MainWindow(QWidget *parent) :
 
     m_dbUrl = "http://127.0.0.1:5984/chat/";
     m_allDocsUrl = m_dbUrl + "_all_docs";
-    m_continuousUrl = m_dbUrl + "_changes?feed=continuous&since=29";
+    m_since = "45";
+    m_continuousUrl = m_dbUrl + "_changes?feed=longpoll&hearheat=1000&since=" + m_since ;
+
+
+
+
+    QTimer *timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(on_pushButton_changes_clicked()));
+    timer->start(1000);
+
+    m_buffer = new QBuffer(this);
+    m_buffer->open(QIODevice::ReadWrite);
 
 
     m_networkAccessManager = new QNetworkAccessManager(this);
@@ -25,6 +36,7 @@ MainWindow::MainWindow(QWidget *parent) :
     m_getMsgManager = new QNetworkAccessManager(this);
     m_getAllDocsManager = new QNetworkAccessManager(this);
     m_getContinuousManager = new QNetworkAccessManager(this);
+    m_getChangesManager = new QNetworkAccessManager(this);
 
     connect(nam_uuid, SIGNAL(finished(QNetworkReply*)),
              this, SLOT(uuidFinished(QNetworkReply*)));
@@ -35,9 +47,17 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(m_getAllDocsManager, SIGNAL(finished(QNetworkReply*)),
              this, SLOT(getAllDocs(QNetworkReply*)));
 
+    connect(m_getChangesManager, SIGNAL(finished(QNetworkReply*)),
+             this, SLOT(getChangesDoc(QNetworkReply*)));
+
+
     //m_getcontinuousManager
     connect(m_getContinuousManager, SIGNAL(finished(QNetworkReply*)),
              this, SLOT(newMsg(QNetworkReply*)));
+
+    connect(m_getContinuousManager, SIGNAL(networkAccessibleChanged(QNetworkAccessManager::NetworkAccessibility)
+), this, SLOT(networkAccessibleChangedSlot(QNetworkAccessManager::NetworkAccessibility)));
+
 
 
     QUrl url(tr("http://127.0.0.1:5984/chat"));
@@ -126,7 +146,7 @@ void MainWindow::sendFinished(QNetworkReply* reply)
 
 //getMsgFinished
 
-QNetworkReply * MainWindow::get(QNetworkAccessManager *networkAccessManager, QString requestUrl)
+QNetworkReply * MainWindow::get(QNetworkAccessManager *networkAccessManager, QString &requestUrl)
 {
     return networkAccessManager->get(QNetworkRequest(requestUrl));
 }
@@ -147,7 +167,7 @@ void MainWindow::getMsgFinished(QNetworkReply* reply)
     QString uname = jd.object().value("uname").toString();
     QString msg = jd.object().value("msg").toString();
 
-    ui->textEdit_history->append( uname +":"+ msg );
+//    ui->textEdit_history->append( uname +":"+ msg );
 
 
 
@@ -195,8 +215,23 @@ void MainWindow::readMsg(QNetworkReply *reply)
 
 void MainWindow::newMsg(QNetworkReply *reply)
 {
-    QJsonDocument jd = getJson(reply->readAll());
-    qDebug() << jd;
+    qDebug() <<"wait new msg";
+
+    while(true)
+    {
+        qint64 bytes = reply->readBufferSize();
+
+        qDebug() << reply->readLine(bytes);
+    }
+//    qint64 bytes = m_buffer->write(reply->readAll());
+//    m_buffer->seek(m_buffer->pos() - bytes);
+//    while (m_buffer->canReadLine())
+//    {
+//        QByteArray line = m_buffer->readLine();
+
+//        qDebug() << line;
+
+//    }
 }
 
 QJsonDocument MainWindow::getJson(QByteArray qba)
@@ -212,6 +247,31 @@ QJsonDocument MainWindow::getJson(QByteArray qba)
     return jd;
 }
 
+void MainWindow::networkAccessibleChangedSlot(QNetworkAccessManager::NetworkAccessibility)
+{
+    qDebug() << "networkAccessibleChangedSlot";
+}
+
+void MainWindow::getChangesDoc(QNetworkReply *reply)
+{
+    QJsonDocument jd = this->getJson(reply->readAll());
+
+    int last_seq = jd.object().value("last_seq").toInt();
+    m_since = QString::number(last_seq);
+//    qDebug() << m_since;
+
+
+    foreach(QJsonValue jvv, jd.object().value("results").toArray())
+    {
+
+        getMsgById(jvv.toObject().value("id").toString());
+    }
+
+
+
+
+}
+
 
 void MainWindow::getChanges(QNetworkReply *reply)
 {
@@ -224,7 +284,14 @@ void MainWindow::on_pushButton_gmsglist_clicked()
 
 }
 
-void MainWindow::on_pushButton_2_clicked()
+
+void MainWindow::on_pushButton_continuous_clicked()
 {
     this->get(m_getContinuousManager, m_continuousUrl);
+}
+
+void MainWindow::on_pushButton_changes_clicked()
+{
+    m_changesUrl = m_dbUrl + "_changes?since=" + m_since;
+    this->get(m_getChangesManager, m_changesUrl);
 }
